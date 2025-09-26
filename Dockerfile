@@ -19,6 +19,8 @@ COPY main.go .
 COPY tpl.html .
 
 ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build \
     -ldflags="-s -w" -o /app/main
 
