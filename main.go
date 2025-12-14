@@ -8,18 +8,18 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 )
 
-// Constante contenant notre template HTML.
-// L'utilisation de ` backticks ` permet d'écrire sur plusieurs lignes.
-//
 //go:embed tpl.html
 var htmlTemplate string
 
+var nodeName string
 // Structure de données pour passer l'IP au template.
 type PageData struct {
 	IP      string
 	LocalIP string
+	NodeName string
 }
 
 // ipHandler est le gestionnaire pour nos requêtes HTTP.
@@ -37,7 +37,10 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 		}
 
 		// On prépare les données pour le template.
-		data := PageData{IP: ip}
+		data := PageData{
+			IP: ip,
+			NodeName: nodeName,
+		}
 
 		// On exécute le template en lui passant les données.
 		// Le résultat est écrit dans http.ResponseWriter.
@@ -55,6 +58,10 @@ func main() {
 	addr := flag.String("addr", "", "Adresse d'écoute (ex: 127.0.0.1, [::1]). Laisser vide pour toutes les interfaces.")
 	port := flag.Int("port", 8080, "Port d'écoute")
 	flag.Parse()
+	nodeName = os.Getenv("NODE_NAME")
+	if nodeName == "" {
+		nodeName,_  = os.Hostname()
+	}
 
 	// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
 	tmpl, err := template.New("ipPage").Parse(htmlTemplate)
@@ -69,7 +76,7 @@ func main() {
 	http.HandleFunc("/", ipHandler(tmpl))
 
 	// Affichage d'un message de démarrage dans la console.
-	log.Printf("Serveur web démarré. Écoute sur: http://localhost:%d (et sur %s)", *port, listenAddr)
+	log.Printf("Serveur web démarré sur %s. Écoute %s", nodeName,listenAddr)
 
 	// Démarrage du serveur HTTP. log.Fatal s'exécutera en cas d'erreur au démarrage.
 	if err := http.ListenAndServe(listenAddr, nil); err != nil {
