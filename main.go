@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -9,17 +10,19 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"crypto/tls"
+
+	"github.com/quic-go/quic-go/http3"
 )
 
 //go:embed tpl.html
 var htmlTemplate string
 
 var nodeName string
+
 // Structure de données pour passer l'IP au template.
 type PageData struct {
-	IP      string
-	LocalIP string
+	IP       string
+	LocalIP  string
 	NodeName string
 }
 
@@ -39,7 +42,7 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 
 		// On prépare les données pour le template.
 		data := PageData{
-			IP: ip,
+			IP:       ip,
 			NodeName: nodeName,
 		}
 
@@ -82,7 +85,7 @@ func main() {
 		log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
 	}
 
-	// Création des adresses d'écoute pour HTTP et HTTPS
+	// Création des adresses d'écoute pour HTTP, HTTPS et QUIC (HTTP/3)
 	httpListenAddr := fmt.Sprintf("%s:%d", *addr, *httpPort)
 	httpsListenAddr := fmt.Sprintf("%s:%d", *addr, *httpsPort)
 
@@ -93,32 +96,22 @@ func main() {
 		if err != nil {
 			log.Fatalf("Erreur lors du chargement du certificat: %v", err)
 		}
-
-		log.Printf("Serveur HTTPS démarré sur %s avec certificat %s", nodeName, *certPath)
-	} else {
-		log.Printf("Serveur HTTP démarré sur %s", nodeName)
 	}
 
 	// Enregistrement de notre gestionnaire pour la racine du site "/".
 	http.HandleFunc("/", ipHandler(tmpl))
 
-	// Démarrage du serveur HTTP et HTTPS
-	if *tlsEnabled {
-		// Start HTTPS server in a goroutine
-		go func() {
-			if err := http.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, ipHandler(tmpl)); err != nil {
-				log.Fatalf("Erreur: Impossible de démarrer le serveur HTTPS. %v", err)
-			}
-		}()
-
-		// Start HTTP server
-		if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
-			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
+	// Démarrage du serveur HTTP/3
+	if *httpsPort != 0 {
+		if err := http3.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, nil); err != nil {
+			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP/3. %v", err)
 		}
-	} else {
-		// Start HTTP server only
-		if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
-			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
-		}
+		log.Printf("Serveur HTTP/3+HTTP/2 démarré sur %s", httpListenAddr)
 	}
+
+	// Start HTTP server
+	if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
+		log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
+	}
+
 }

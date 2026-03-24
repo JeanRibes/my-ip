@@ -34,4 +34,4 @@ FROM scratch
 WORKDIR /app
 COPY --from=builder /app/main /app/main
 
-CMD ["/app/main"]
+CMD ["/app/main", "--quic-port", "3081"]
