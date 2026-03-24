@@ -102,11 +102,13 @@ func main() {
 	http.HandleFunc("/", ipHandler(tmpl))
 
 	// Démarrage du serveur HTTP/3
-	if *httpsPort != 0 {
-		if err := http3.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, nil); err != nil {
-			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP/3. %v", err)
-		}
-		log.Printf("Serveur HTTP/3+HTTP/2 démarré sur %s", httpListenAddr)
+	if *tlsEnabled {
+		go func() {
+			if err := http3.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, nil); err != nil {
+				log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP/3. %v", err)
+			}
+			log.Printf("Serveur HTTP/3+HTTP/2 démarré sur %s", httpListenAddr)
+		}()
 	}
 
 	// Start HTTP server
