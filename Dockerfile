@@ -16,6 +16,8 @@ RUN go mod download
 # The linker flags "-s -w" strip symbols and debug to make the image smaller.
 # You may or may not want to use these
 COPY main.go .
+COPY go.mod .
+COPY go.sum .
 COPY tpl.html .
 
 ARG TARGETPLATFORM
