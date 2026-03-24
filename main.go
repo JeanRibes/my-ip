@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"crypto/tls"
 )
 
 //go:embed tpl.html
@@ -53,14 +54,26 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 }
 
 func main() {
-	// Définition des flags pour la configuration de l'adresse et du port.
+	// Définition des flags pour la configuration de l'adresse et des ports.
 	// L'adresse vide "" ou "[::]" signifie une écoute sur toutes les interfaces réseau (IPv4 et IPv6).
 	addr := flag.String("addr", "", "Adresse d'écoute (ex: 127.0.0.1, [::1]). Laisser vide pour toutes les interfaces.")
-	port := flag.Int("port", 8080, "Port d'écoute")
+	httpPort := flag.Int("http-port", 3080, "Port d'écoute pour HTTP")
+	httpsPort := flag.Int("https-port", 3443, "Port d'écoute pour HTTPS")
+	certPath := flag.String("cert-file", "", "Path to the certificate file for HTTPS")
+	keyPath := flag.String("key-file", "", "Path to the private key file for HTTPS")
+	tlsEnabled := flag.Bool("tls", false, "Enable HTTPS with TLS")
 	flag.Parse()
+
+	// Verify that TLS is enabled if certificate files are specified
+	if *certPath != "" || *keyPath != "" {
+		if !*tlsEnabled {
+			log.Fatal("TLS certificate files specified but --tls flag not set. Use --tls to enable HTTPS.")
+		}
+	}
+
 	nodeName = os.Getenv("NODE_NAME")
 	if nodeName == "" {
-		nodeName,_  = os.Hostname()
+		nodeName, _ = os.Hostname()
 	}
 
 	// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
@@ -69,17 +82,43 @@ func main() {
 		log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
 	}
 
-	// Création de l'adresse d'écoute complète.
-	listenAddr := fmt.Sprintf("%s:%d", *addr, *port)
+	// Création des adresses d'écoute pour HTTP et HTTPS
+	httpListenAddr := fmt.Sprintf("%s:%d", *addr, *httpPort)
+	httpsListenAddr := fmt.Sprintf("%s:%d", *addr, *httpsPort)
+
+	// Configuration TLS pour HTTPS
+	if *tlsEnabled && *certPath != "" && *keyPath != "" {
+		// Load certificate and key
+		_, err := tls.LoadX509KeyPair(*certPath, *keyPath)
+		if err != nil {
+			log.Fatalf("Erreur lors du chargement du certificat: %v", err)
+		}
+
+		log.Printf("Serveur HTTPS démarré sur %s avec certificat %s", nodeName, *certPath)
+	} else {
+		log.Printf("Serveur HTTP démarré sur %s", nodeName)
+	}
 
 	// Enregistrement de notre gestionnaire pour la racine du site "/".
 	http.HandleFunc("/", ipHandler(tmpl))
 
-	// Affichage d'un message de démarrage dans la console.
-	log.Printf("Serveur web démarré sur %s. Écoute %s", nodeName,listenAddr)
+	// Démarrage du serveur HTTP et HTTPS
+	if *tlsEnabled {
+		// Start HTTPS server in a goroutine
+		go func() {
+			if err := http.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, ipHandler(tmpl)); err != nil {
+				log.Fatalf("Erreur: Impossible de démarrer le serveur HTTPS. %v", err)
+			}
+		}()
 
-	// Démarrage du serveur HTTP. log.Fatal s'exécutera en cas d'erreur au démarrage.
-	if err := http.ListenAndServe(listenAddr, nil); err != nil {
-		log.Fatalf("Erreur: Impossible de démarrer le serveur. %v", err)
+		// Start HTTP server
+		if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
+			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
+		}
+	} else {
+		// Start HTTP server only
+		if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
+			log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
+		}
 	}
 }
