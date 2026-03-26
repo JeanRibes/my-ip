@@ -1,1 +1,4 @@
 myip
+main.arm64
+main.amd64
+*.pem

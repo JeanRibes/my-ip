@@ -149,12 +149,11 @@
         <nav>
             <ul>
                 <li>
-                    <a href="http://finarfin.dn42">Homepage</a>
+                    <a href="https://blog.kub.jean-ribes.fr.eu.org/">Blog</a>
                 </li>
                 <li>
-                    <a href="https://grafana.finarfin.dn42/">Monitoring</a>
+                    <a href="https://ipv6.finarfin.dn42/">My IP - DN42</a>
                 </li>
-                <li><a href="http://lg.finarfin.dn42:8179/">Looking Glass</a></li>
             </ul>
         </nav>
     </header>
@@ -198,13 +197,10 @@
             </table>
             <h3 class="heading">Request Headers</h3>
             <p>These are the headers that the server received in the request. Some of them could be attributed to a reverse proxy, the rest are set by your browser</p>
-            <pre>
-                <code>
-{{- range $key,$values := .Headers }}
-{{- range $values }}
+            <pre><code>{{- range $key,$values := .Headers -}}{{- range $values -}}
 {{ $key }}: {{ . }}
-{{- end }}
-{{- end }}
+{{ end -}}
+{{- end -}}
                 </code>
             </pre>
         </section>

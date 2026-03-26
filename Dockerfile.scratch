@@ -1,0 +1,7 @@
+FROM scratch
+
+# Set the workdir and add our app
+WORKDIR /app
+COPY main.arm64 /app/main
+
+CMD ["/app/main"]

@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	_ "embed"
 	"flag"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -15,7 +15,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
-//go:embed tpl.html
+//go:embed default.html
 var htmlTemplate string
 
 var nodeName string
@@ -34,58 +34,60 @@ type PageData struct {
 }
 
 // ipHandler est le gestionnaire pour nos requêtes HTTP.
-func ipHandler(tmpl *template.Template) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// r.RemoteAddr contient l'adresse IP et le port source (ex: "192.0.2.1:12345" ou "[2001:db8::1]:54321").
-		// net.SplitHostPort sépare correctement l'hôte (IP) du port pour IPv4 et IPv6.
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			// Si SplitHostPort échoue, c'est peut-être que le port n'est pas présent.
-			// Dans ce cas, RemoteAddr est probablement juste l'IP.
-			// C'est moins courant mais on le gère pour plus de robustesse.
-			log.Printf("Impossible de séparer l'hôte et le port pour %q: %v. Utilisation de la valeur brute.", r.RemoteAddr, err)
-			ip = r.RemoteAddr
-		}
-		proto := r.Proto
+func ipHandler(w http.ResponseWriter, r *http.Request) {
+	// r.RemoteAddr contient l'adresse IP et le port source (ex: "192.0.2.1:12345" ou "[2001:db8::1]:54321").
+	// net.SplitHostPort sépare correctement l'hôte (IP) du port pour IPv4 et IPv6.
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		// Si SplitHostPort échoue, c'est peut-être que le port n'est pas présent.
+		// Dans ce cas, RemoteAddr est probablement juste l'IP.
+		// C'est moins courant mais on le gère pour plus de robustesse.
+		log.Printf("Impossible de séparer l'hôte et le port pour %q: %v. Utilisation de la valeur brute.", r.RemoteAddr, err)
+		ip = r.RemoteAddr
+	}
+	proto := r.Proto
 
-		// On prépare les données pour le template.
-		data := PageData{
-			IP:       ip,
-			NodeName: nodeName,
-			Proto:    proto,
-			Headers:  r.Header,
-		}
-		if r.TLS != nil {
-			data.TLSVersion = tls.VersionName(r.TLS.Version)
-			data.ALPN = r.TLS.NegotiatedProtocol
-			data.TLSServerName = r.TLS.ServerName
-		}
-		if *tpl != "" {
-			f, err := os.Open(*tpl)
+	// On prépare les données pour le template.
+	data := PageData{
+		IP:       ip,
+		NodeName: nodeName,
+		Proto:    proto,
+		Headers:  r.Header,
+	}
+	if r.TLS != nil {
+		data.TLSVersion = tls.VersionName(r.TLS.Version)
+		data.ALPN = r.TLS.NegotiatedProtocol
+		data.TLSServerName = r.TLS.ServerName
+	}
+	if *devTmpl {
+		f, err := os.Open(*tmplFile)
+		if err == nil {
+			buf := new(bytes.Buffer)
+			_, err = buf.ReadFrom(f)
 			if err == nil {
-				buf, err := io.ReadAll(f)
-				if err == nil {
-					htmlTemplate = string(buf)
-					// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
-					tmpl, err = template.New("ipPage").Parse(htmlTemplate)
-					if err != nil {
-						log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
-					}
+				htmlTemplate = buf.String()
+				// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
+				tmpl, err = template.New("ipPage").Parse(htmlTemplate)
+				if err != nil {
+					log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
 				}
+				log.Printf("Reloaded template from %s\n", *tmplFile)
 			}
 		}
+	}
 
-		// On exécute le template en lui passant les données.
-		// Le résultat est écrit dans http.ResponseWriter.
-		err = tmpl.Execute(w, data)
-		if err != nil {
-			log.Printf("Erreur lors de l'exécution du template: %v", err)
-			http.Error(w, "Erreur interne du serveur", http.StatusInternalServerError)
-		}
+	// On exécute le template en lui passant les données.
+	// Le résultat est écrit dans http.ResponseWriter.
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		log.Printf("Erreur lors de l'exécution du template: %v", err)
+		http.Error(w, "Erreur interne du serveur", http.StatusInternalServerError)
 	}
 }
 
-var tpl *string
+var devTmpl *bool
+var tmplFile *string
+var tmpl *template.Template
 
 func main() {
 	// Définition des flags pour la configuration de l'adresse et des ports.
@@ -96,7 +98,8 @@ func main() {
 	certPath := flag.String("cert", "", "Path to the certificate file for HTTPS")
 	keyPath := flag.String("key", "", "Path to the private key file for HTTPS")
 	tlsEnabled := flag.Bool("tls", false, "Enable HTTPS with TLS")
-	tpl = flag.String("tpl", "", "Use another template")
+	devTmpl = flag.Bool("dev", false, "Template dev mode: load file on each request")
+	tmplFile = flag.String("tpl", "", "Use another template")
 	flag.Parse()
 
 	httpsPort = *_httpsPort
@@ -112,10 +115,25 @@ func main() {
 	if nodeName == "" {
 		nodeName, _ = os.Hostname()
 	}
-	// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
-	tmpl, err := template.New("ipPage").Parse(htmlTemplate)
-	if err != nil {
-		log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
+	if *tmplFile != "" {
+		f, err := os.Open(*tmplFile)
+		if err != nil {
+			log.Fatalf("Impossible d'ouvrir le fichier tmeplate: %v", err)
+		}
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(f)
+		tmpl, err = template.New("ipPage").Parse(buf.String())
+		if err != nil {
+			log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
+		}
+
+	} else {
+		var err error
+		// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
+		tmpl, err = template.New("ipPage").Parse(htmlTemplate)
+		if err != nil {
+			log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
+		}
 	}
 
 	// Création des adresses d'écoute pour HTTP, HTTPS et QUIC (HTTP/3)
@@ -134,7 +152,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Enregistrement de notre gestionnaire pour la racine du site "/".
-	mux.HandleFunc("/", ipHandler(tmpl))
+	mux.HandleFunc("/", ipHandler)
 	mux.HandleFunc("/proto", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, r.Proto)
 	})
