@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>What is my IP</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        html {
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            background-color: #faebd7;
+        }
+
+        header {
+            margin: 0;
+            background-color: #3d003d;
+            color: white;
+            /* padding: 0.01rem; */
+            display: flex;
+            align-items: center;
+            align-content: center;
+            box-shadow: 5px 0 10px black;
+
+            h1 {
+                border-right: 5px solid burlywood;
+                padding-right: 1rem;
+                margin: 0.3rem;
+                color: white;
+            }
+
+            nav {
+                ul {
+                    margin: 0;
+                    padding: 0;
+                    margin-left: 1rem;
+                }
+
+                li {
+                    display: inline-block;
+                    list-style: none;
+                }
+
+                li+li::before {
+                    content: "|";
+                }
+
+                a {
+                    font-weight: bold;
+                    text-decoration: underline dashed white;
+                    color: white;
+                }
+            }
+
+        }
+
+        main {
+            margin: auto;
+            max-width: 48rem;
+        }
+
+        .heading {
+            color: #3d003d;
+            border-bottom: 2px dashed;
+            width: fit-content;
+            font-family: "PT Serif", Georgia, Times, "Times New Roman", serif;
+            margin: 0;
+            font-size: 1.6rem;
+            margin-top: 1rem;
+        }
+        th {
+            text-align: right;
+        }
+        td {
+            text-align: left;
+        }
+
+
+        body {
+            font-family: sans-serif;
+        }
+
+        pre {
+            font-family: Menlo, Consolas, Monaco, Liberation Mono, Lucida Console, monospace;
+            font-size: 1.3em;
+            background-color: #2a2139;
+            color: blanchedalmond;
+            padding-left: 1rem;
+            font-weight: normal;
+            text-wrap: wrap;
+            box-shadow: 0px 0px 10px white inset;
+        }
+
+        blockquote {
+            border-left: 4px solid #3d003d;
+            font-style: italic;
+            padding-left: 2rem;
+            font-family: "PT Serif", Georgia, Times, "Times New Roman", serif;
+            font-size: 1.3em;
+            margin: 0;
+        }
+
+        p>code {
+            font-style: normal;
+            font-weight: bold;
+        }
+
+        figcaption {
+            h3 {
+                text-align: center;
+            }
+        }
+
+        figure.card {
+            max-width: 60rem;
+        }
+
+        p {
+            margin-bottom: 0;
+        }
+
+        #ip {
+            text-align: center;
+            display: block;
+            font-size: 1.5em;
+            font-weight: bold;
+            background-color: #1d0031;
+            color: #f8ad58;
+            width: fit-content;
+            padding: 1rem;
+            margin: auto;
+            clip-path: polygon(1rem 0, 100% 0rem, 100% 100%, 0 100%, 0 100%, 0 1rem);
+            /* clip-path: polygon(50% -100%, 110% 50%, 50% 200%, -10% 50%); */
+
+            clip-path: polygon(calc(100% - 0.7rem) 0, 100% 0.7rem, 100% calc(100% - 0.7rem), calc(100% - 0.7rem) 100%, 0.7rem 100%, 0 calc(100% - 0.7rem), 0px 0.7rem, 0.7rem 0);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+
+        <h1>My IP</h1>
+        <nav>
+            <ul>
+                <li>
+                    <a href="http://finarfin.dn42">Homepage</a>
+                </li>
+                <li>
+                    <a href="https://grafana.finarfin.dn42/">Monitoring</a>
+                </li>
+                <li><a href="http://lg.finarfin.dn42:8179/">Looking Glass</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <blockquote>
+            <p>Hi !<br />
+                Welcome to my network. You are connected to node <code>{{ .NodeName }}</code>
+            </p>
+        </blockquote>
+        <section>
+            <h2 class="heading">What is your IP ?</h2>
+            <p>Your client reached this server using the following IP address:
+            </p>
+            <code id="ip">{{ .IP }}</code>
+            <p>Additional informations on the HTTP(S)/2/3 connection:</p>
+            <table>
+                <tr>
+                    <th>Protocol:</th>
+                    <td>{{ .Proto }}</td>
+                </tr>
+                {{- with .ALPN}}
+                <tr>
+                    <th>ALPN:</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+
+                {{- with .TLSServerName}}
+                <tr>
+                    <th>TLS Server Name:</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+                {{- with .TLSVersion }}
+                <tr>
+
+                    <th>TLS Version:</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+            </table>
+            <h3 class="heading">Request Headers</h3>
+            <p>These are the headers that the server received in the request. Some of them could be attributed to a reverse proxy, the rest are set by your browser</p>
+            <pre>
+                <code>
+{{- range $key,$values := .Headers }}
+{{- range $values }}
+{{ $key }}: {{ . }}
+{{- end }}
+{{- end }}
+                </code>
+            </pre>
+        </section>
+    </main>
+</body>
+
+</html>

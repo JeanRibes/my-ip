@@ -63,6 +63,20 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 			data.ALPN = r.TLS.NegotiatedProtocol
 			data.TLSServerName = r.TLS.ServerName
 		}
+		if *tpl != "" {
+			f, err := os.Open(*tpl)
+			if err == nil {
+				buf, err := io.ReadAll(f)
+				if err == nil {
+					htmlTemplate = string(buf)
+					// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
+					tmpl, err = template.New("ipPage").Parse(htmlTemplate)
+					if err != nil {
+						log.Fatalf("Erreur: Impossible de compiler le template HTML. %v", err)
+					}
+				}
+			}
+		}
 
 		// On exécute le template en lui passant les données.
 		// Le résultat est écrit dans http.ResponseWriter.
@@ -74,6 +88,8 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 	}
 }
 
+var tpl *string
+
 func main() {
 	// Définition des flags pour la configuration de l'adresse et des ports.
 	// L'adresse vide "" ou "[::]" signifie une écoute sur toutes les interfaces réseau (IPv4 et IPv6).
@@ -83,7 +99,7 @@ func main() {
 	certPath := flag.String("cert", "", "Path to the certificate file for HTTPS")
 	keyPath := flag.String("key", "", "Path to the private key file for HTTPS")
 	tlsEnabled := flag.Bool("tls", false, "Enable HTTPS with TLS")
-	tpl := flag.String("tpl", "", "Use another template")
+	tpl = flag.String("tpl", "", "Use another template")
 	flag.Parse()
 
 	httpsPort = *_httpsPort
@@ -99,16 +115,6 @@ func main() {
 	if nodeName == "" {
 		nodeName, _ = os.Hostname()
 	}
-	if *tpl != "" {
-		f, err := os.Open(*tpl)
-		if err == nil {
-			buf, err := io.ReadAll(f)
-			if err == nil {
-				htmlTemplate = string(buf)
-			}
-		}
-	}
-
 	// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
 	tmpl, err := template.New("ipPage").Parse(htmlTemplate)
 	if err != nil {
