@@ -118,6 +118,10 @@
 
             }
         }
+
+        dt {
+            display: inline;
+        }
     </style>
 </head>
 
@@ -193,6 +197,42 @@
             <p>Your client reached this server using the following IP address:
             </p>
             <code id="ip">{{ .IP }}</code>
+            <table>
+                <tr>
+                    <th>Protocol</th>
+                    <td>{{ .Proto }}</td>
+                </tr>
+                {{- with .ALPN}}
+                <tr>
+                    <th>ALPN</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+
+                {{- with .TLSServerName}}
+                <tr>
+                    <th>TLS Server Name</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+                {{- with .TLSVersion }}
+                <tr>
+
+                    <th>TLS Version</th>
+                    <td>{{.}}</td>
+                </tr>
+                {{- end }}
+            </table>
+            <h3>Request Headers</h3>
+            <pre>
+                <code>
+{{- range $key,$values := .Headers }}
+{{- range $values }}
+{{ $key }}: {{ . }}
+{{- end }}
+{{- end }}
+                </code>
+            </pre>
         </section>
         <section>
             <p>This service is not currently in the <code>myip.dn42</code> anycast block.</p>

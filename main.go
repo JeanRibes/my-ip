@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -18,12 +19,18 @@ import (
 var htmlTemplate string
 
 var nodeName string
+var httpsPort int
 
 // Structure de données pour passer l'IP au template.
 type PageData struct {
-	IP       string
-	LocalIP  string
-	NodeName string
+	IP            string
+	LocalIP       string
+	NodeName      string
+	Proto         string
+	Headers       http.Header
+	TLSVersion    string
+	TLSServerName string
+	ALPN          string
 }
 
 // ipHandler est le gestionnaire pour nos requêtes HTTP.
@@ -39,11 +46,22 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 			log.Printf("Impossible de séparer l'hôte et le port pour %q: %v. Utilisation de la valeur brute.", r.RemoteAddr, err)
 			ip = r.RemoteAddr
 		}
+		proto := r.Proto
+		if proto != "HTTP/3.0" {
+			w.Header().Add("Alt-Svc", fmt.Sprintf(`h3=":%d"; ma=900`, httpsPort))
+		}
 
 		// On prépare les données pour le template.
 		data := PageData{
 			IP:       ip,
 			NodeName: nodeName,
+			Proto:    proto,
+			Headers:  r.Header,
+		}
+		if r.TLS != nil {
+			data.TLSVersion = tls.VersionName(r.TLS.Version)
+			data.ALPN = r.TLS.NegotiatedProtocol
+			data.TLSServerName = r.TLS.ServerName
 		}
 
 		// On exécute le template en lui passant les données.
@@ -60,12 +78,15 @@ func main() {
 	// Définition des flags pour la configuration de l'adresse et des ports.
 	// L'adresse vide "" ou "[::]" signifie une écoute sur toutes les interfaces réseau (IPv4 et IPv6).
 	addr := flag.String("addr", "", "Adresse d'écoute (ex: 127.0.0.1, [::1]). Laisser vide pour toutes les interfaces.")
-	httpPort := flag.Int("http-port", 3080, "Port d'écoute pour HTTP")
-	httpsPort := flag.Int("https-port", 3443, "Port d'écoute pour HTTPS")
-	certPath := flag.String("cert-file", "", "Path to the certificate file for HTTPS")
-	keyPath := flag.String("key-file", "", "Path to the private key file for HTTPS")
+	httpPort := flag.Int("http-port", 80, "Port d'écoute pour HTTP")
+	_httpsPort := flag.Int("https-port", 443, "Port d'écoute pour HTTPS")
+	certPath := flag.String("cert", "", "Path to the certificate file for HTTPS")
+	keyPath := flag.String("key", "", "Path to the private key file for HTTPS")
 	tlsEnabled := flag.Bool("tls", false, "Enable HTTPS with TLS")
+	tpl := flag.String("tpl", "", "Use another template")
 	flag.Parse()
+
+	httpsPort = *_httpsPort
 
 	// Verify that TLS is enabled if certificate files are specified
 	if *certPath != "" || *keyPath != "" {
@@ -78,6 +99,15 @@ func main() {
 	if nodeName == "" {
 		nodeName, _ = os.Hostname()
 	}
+	if *tpl != "" {
+		f, err := os.Open(*tpl)
+		if err == nil {
+			buf, err := io.ReadAll(f)
+			if err == nil {
+				htmlTemplate = string(buf)
+			}
+		}
+	}
 
 	// Compilation du template HTML une seule fois au démarrage pour de meilleures performances.
 	tmpl, err := template.New("ipPage").Parse(htmlTemplate)
@@ -87,7 +117,7 @@ func main() {
 
 	// Création des adresses d'écoute pour HTTP, HTTPS et QUIC (HTTP/3)
 	httpListenAddr := fmt.Sprintf("%s:%d", *addr, *httpPort)
-	httpsListenAddr := fmt.Sprintf("%s:%d", *addr, *httpsPort)
+	httpsListenAddr := fmt.Sprintf("%s:%d", *addr, httpsPort)
 
 	// Configuration TLS pour HTTPS
 	if *tlsEnabled && *certPath != "" && *keyPath != "" {
@@ -98,21 +128,27 @@ func main() {
 		}
 	}
 
+	mux := http.NewServeMux()
+
 	// Enregistrement de notre gestionnaire pour la racine du site "/".
-	http.HandleFunc("/", ipHandler(tmpl))
+	mux.HandleFunc("/", ipHandler(tmpl))
+	mux.HandleFunc("/proto", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, r.Proto)
+	})
 
 	// Démarrage du serveur HTTP/3
 	if *tlsEnabled {
 		go func() {
-			if err := http3.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, nil); err != nil {
+			log.Printf("Démarrage HTTP/3 sur %s", httpListenAddr)
+			if err := http3.ListenAndServeTLS(httpsListenAddr, *certPath, *keyPath, mux); err != nil {
 				log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP/3. %v", err)
 			}
-			log.Printf("Serveur HTTP/3+HTTP/2 démarré sur %s", httpListenAddr)
 		}()
 	}
 
 	// Start HTTP server
-	if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
+	log.Printf("Démarrage du servuer HTTP/1.1 sur %s", httpListenAddr)
+	if err := http.ListenAndServe(httpListenAddr, mux); err != nil {
 		log.Fatalf("Erreur: Impossible de démarrer le serveur HTTP. %v", err)
 	}
 
