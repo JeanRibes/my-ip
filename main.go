@@ -47,9 +47,6 @@ func ipHandler(tmpl *template.Template) http.HandlerFunc {
 			ip = r.RemoteAddr
 		}
 		proto := r.Proto
-		if proto != "HTTP/3.0" {
-			w.Header().Add("Alt-Svc", fmt.Sprintf(`h3=":%d"; ma=900`, httpsPort))
-		}
 
 		// On prépare les données pour le template.
 		data := PageData{
