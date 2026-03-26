@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  myip:
+    image: ghcr.io/jeanribes/my-ip:main
+    ports:
+      - 80:80
+      - 443:443
+    command: >-
+      /app/main
+      --http-port=80
+      --https-port=443 --tls
+      --cert=/etc/ssl/tls.crt
+      --key=/etc/ssl/tls.key
+    volumes:
+      - ./tls.crt:/etc/ssl/tls.crt
+      - ./tls.key:/etc/ssl/tls.key
+    environment:
+      - 'NODE_NAME=hostname.network.lan'
+    restart: unless-stopped
